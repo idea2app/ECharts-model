@@ -1,0 +1,64 @@
+{
+    "name": "echarts-model",
+    "version": "0.1.0",
+    "author": "shiy2008@gmail.com",
+    "license": "LGPL-3.0",
+    "description": "Data Model generator for ECharts, which is based on TypeScript, makes you to focus on Data Structure instead of complex options.",
+    "keywords": [
+        "data",
+        "model",
+        "generator",
+        "chart",
+        "echarts",
+        "typescript"
+    ],
+    "homepage": "https://ideapp.dev/ECharts-model/",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/idea2app/ECharts-model.git"
+    },
+    "bugs": {
+        "url": "https://github.com/idea2app/ECharts-model/issues"
+    },
+    "main": "dist/index.js",
+    "module": "dist/index.esm.js",
+    "source": "source/index.ts",
+    "types": "dist/index.d.ts",
+    "peerDependencies": {
+        "@types/echarts": "^4.9.7",
+        "array-unique-proposal": "^0.3.1",
+        "echarts": "^5.0.0"
+    },
+    "devDependencies": {
+        "@types/echarts": "^4.9.7",
+        "array-unique-proposal": "^0.3.1",
+        "echarts": "^5.1.1",
+        "esbuild": "^0.11.17",
+        "husky": "^6.0.0",
+        "lint-staged": "^10.5.4",
+        "prettier": "^2.2.1",
+        "typedoc": "^0.20.36",
+        "typescript": "^4.2.4"
+    },
+    "prettier": {
+        "singleQuote": true,
+        "trailingComma": "none",
+        "arrowParens": "avoid",
+        "tabWidth": 4
+    },
+    "lint-staged": {
+        "*.{md,json,yml,ts}": "prettier --write"
+    },
+    "scripts": {
+        "prepare": "husky install",
+        "test": "lint-staged",
+        "pack-type": "tsc --emitDeclarationOnly",
+        "pack-dist": "esbuild source/index.ts --bundle --minify --sourcemap --external:array-unique-proposal --external:echarts",
+        "pack-cjs": "npm run pack-dist -- --format=cjs --outfile=dist/index.js",
+        "pack-esm": "npm run pack-dist -- --format=esm --outfile=dist/index.esm.js",
+        "pack-docs": "rm -rf docs/  &&  typedoc source/",
+        "build": "rm -rf dist/  &&  npm run pack-type  &&  npm run pack-cjs  &&  npm run pack-esm  &&  npm run pack-docs",
+        "help": "npm run pack-docs  &&  open-cli docs/index.html",
+        "prepublishOnly": "npm test  &&  npm run build"
+    }
+}

@@ -1,0 +1,18 @@
+{
+    "compilerOptions": {
+        "target": "ES5",
+        "module": "ES6",
+        "moduleResolution": "Node",
+        "lib": ["ES2020", "DOM"],
+        "declaration": true,
+        "outDir": "dist/"
+    },
+    "include": ["source/*.ts"],
+    "typedocOptions": {
+        "name": "ECharts model",
+        "excludeExternals": true,
+        "excludePrivate": true,
+        "readme": "./ReadMe.md",
+        "out": "docs/"
+    }
+}
