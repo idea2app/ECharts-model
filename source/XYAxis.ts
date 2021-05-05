@@ -1,7 +1,7 @@
 import 'array-unique-proposal';
 import type { EChartOption } from 'echarts';
 
-import { DataItem } from './Data';
+import { DataItem, minScaleOf } from './Data';
 
 export interface KLineValue {
     open: number;
@@ -10,15 +10,35 @@ export interface KLineValue {
     high: number;
 }
 
-export class KLineDataItem extends DataItem<KLineValue> {}
+export class KLineDataItem extends DataItem<
+    KLineValue,
+    EChartOption.SeriesCandlestick['itemStyle']
+> {
+    constructor(
+        name: string,
+        value: KLineValue,
+        style: EChartOption.SeriesCandlestick['itemStyle'] = {
+            color: 'red',
+            color0: 'green'
+        }
+    ) {
+        super(name, value, style);
+    }
+}
 
 export type XYAxisSeriesType = 'line' | 'bar' | 'candlestick';
+
+export interface XYAxisDataItem {
+    name?: string;
+    value: number | number[];
+    itemStyle: Record<string, any>;
+}
 
 export type XYAxisSeries = Omit<EChartOption.SeriesLine, 'type' | 'data'> &
     Omit<EChartOption.SeriesBar, 'type' | 'data'> &
     Omit<EChartOption.SeriesCandlestick, 'type' | 'data'> & {
         type: XYAxisSeriesType;
-        data: (number | number[])[];
+        data: (number | number[] | XYAxisDataItem)[];
     };
 
 export interface DataSeriesOption {
@@ -28,7 +48,7 @@ export interface DataSeriesOption {
     data: (DataItem | KLineDataItem)[];
     itemStyle?: XYAxisSeries['itemStyle'];
     areaStyle?: XYAxisSeries['areaStyle'];
-    group?: number;
+    gridIndex?: number;
 }
 
 export class DataSeries implements DataSeriesOption {
@@ -38,7 +58,7 @@ export class DataSeries implements DataSeriesOption {
     data: (DataItem | KLineDataItem)[];
     itemStyle?: XYAxisSeries['itemStyle'];
     areaStyle?: XYAxisSeries['areaStyle'];
-    group?: number;
+    gridIndex?: number;
 
     constructor(option: DataSeriesOption) {
         this.type = option.type;
@@ -47,58 +67,53 @@ export class DataSeries implements DataSeriesOption {
         this.data = option.data;
         this.itemStyle = option.itemStyle;
         this.areaStyle = option.areaStyle;
-        this.group = option.group || 0;
+        this.gridIndex = option.gridIndex || 0;
     }
 }
 
-/**
- * @see https://echarts.apache.org/en/option.html#xAxis.axisPointer.label.formatter
- */
-export interface AxisPointerData {
-    componentType: 'series';
-    seriesType: XYAxisSeriesType;
-    seriesIndex: number;
-    seriesName: string;
-    name: string;
-    dataIndex: number;
-    data: object;
-    value: number | object[] | object;
-    encode: Record<string, number[]>;
-    dimensionNames?: string[];
-    dimensionIndex?: number;
-    color: string;
-}
-
-export class XYAxisModel {
+export interface XYAxisOption {
     data: DataSeries[];
     stacked?: boolean;
+    xGrid?: number[];
+    yGrid?: number[];
+}
 
-    constructor(data: DataSeries[], stacked?: boolean) {
+export class XYAxisModel implements XYAxisOption {
+    data: DataSeries[];
+    stacked?: boolean;
+    xGrid?: number[];
+    yGrid?: number[];
+
+    constructor({ data, stacked, xGrid, yGrid }: XYAxisOption) {
         this.data = data;
         this.stacked = stacked;
+        this.xGrid = xGrid;
+        this.yGrid = yGrid;
     }
 
     renderXAxisLabel?: (value: string, index: number) => string;
     renderYAxisLabel?: (value: string, index: number) => string;
 
-    renderXAxisPointerLabel?: (data: AxisPointerData) => string;
-    renderYAxisPointerLabel?: (data: AxisPointerData) => string;
+    renderXAxisPointerLabel?: (data: EChartOption.Tooltip.Format) => string;
+    renderYAxisPointerLabel?: (data: EChartOption.Tooltip.Format) => string;
+
+    renderTooltip?: EChartOption.Tooltip.Formatter;
 
     get xAxis() {
         const formatter =
             this.renderXAxisPointerLabel ||
             (this.renderXAxisLabel &&
-                (({ value, dataIndex }: AxisPointerData) =>
+                (({ value, dataIndex }: EChartOption.Tooltip.Format) =>
                     this.renderXAxisLabel(value + '', dataIndex)));
 
         return this.data
             .map(
-                ({ group, data }, index) =>
-                    (!index || group) &&
+                ({ gridIndex, data }, index) =>
+                    (!index || gridIndex) &&
                     ({
                         type: 'category',
                         data: data.map(({ name }) => name),
-                        gridIndex: group,
+                        gridIndex,
                         axisLabel: { formatter: this.renderXAxisLabel },
                         axisPointer: {
                             type: 'shadow',
@@ -113,16 +128,26 @@ export class XYAxisModel {
         const formatter =
             this.renderYAxisPointerLabel ||
             (this.renderYAxisLabel &&
-                (({ value, dataIndex }: AxisPointerData) =>
+                (({ value, dataIndex }: EChartOption.Tooltip.Format) =>
                     this.renderYAxisLabel(value + '', dataIndex)));
 
         return this.data
             .uniqueBy(({ unit }) => unit)
-            .map(({ unit, group }) => ({
+            .map(({ unit, data, gridIndex }) => ({
                 type: 'value',
+                min:
+                    data[0] instanceof KLineDataItem
+                        ? minScaleOf(
+                              (data as KLineDataItem[]).map(
+                                  ({ value: { low } }) => low
+                              )
+                          )
+                        : minScaleOf(
+                              (data as DataItem[]).map(({ value }) => value)
+                          ),
                 name: unit,
                 nameTextStyle: { align: 'right' },
-                gridIndex: group,
+                gridIndex,
                 axisLabel: { formatter: this.renderYAxisLabel },
                 axisPointer: {
                     label: { formatter }
@@ -131,14 +156,41 @@ export class XYAxisModel {
     }
 
     get grid(): EChartOption.Grid[] {
-        const length = Math.max(...this.data.map(({ group }) => group)) + 1;
+        const { xGrid = [1], yGrid = [1] } = this,
+            offset = 6;
 
-        return length === 1
-            ? [{}]
-            : Array.from(new Array(length), (_, index) => ({
-                  top: `${index * (1 / length) * 100}%`,
-                  height: `${(1 / length) * 100}%`
-              }));
+        if (+xGrid === 1 && +yGrid === 1) return [{}];
+
+        const xSum = xGrid.reduce((sum, item) => sum + item, 0),
+            ySum = yGrid.reduce((sum, item) => sum + item, 0);
+
+        return yGrid
+            .map((scale, index) => {
+                const top = `${
+                        (yGrid
+                            .slice(0, index)
+                            .reduce((sum, item) => sum + item, 0) /
+                            ySum) *
+                            100 +
+                        offset
+                    }%`,
+                    height = `${(scale / ySum) * 100 - offset * 2}%`;
+
+                return xGrid.map((scale, index) => ({
+                    left: `${
+                        (xGrid
+                            .slice(0, index)
+                            .reduce((sum, item) => sum + item, 0) /
+                            xSum) *
+                            100 +
+                        offset
+                    }%`,
+                    top,
+                    width: `${(scale / xSum) * 100 - offset * 2}%`,
+                    height
+                }));
+            })
+            .flat();
     }
 
     get legend(): EChartOption['legend'] | undefined {
@@ -157,7 +209,8 @@ export class XYAxisModel {
     get tooltip(): EChartOption.Tooltip {
         return {
             trigger: 'axis',
-            axisPointer: { type: 'cross' }
+            axisPointer: { type: 'cross' },
+            formatter: this.renderTooltip
         };
     }
 
@@ -165,16 +218,20 @@ export class XYAxisModel {
         const { data, xAxis, yAxis, grid, stacked, legend, tooltip } = this;
 
         const series: XYAxisSeries[] = data.map(
-            ({ type, name, data, unit, itemStyle, areaStyle, group }) => ({
+            ({ type, name, data, unit, itemStyle, areaStyle, gridIndex }) => ({
                 type,
                 name,
-                data: data.map(({ value }) =>
-                    typeof value === 'number'
-                        ? value
-                        : [value.open, value.close, value.low, value.high]
-                ),
-                xAxisIndex: group,
+                data: data.map(({ value, style }) => {
+                    const item =
+                        typeof value === 'number'
+                            ? value
+                            : [value.open, value.close, value.low, value.high];
+
+                    return style ? { value: item, itemStyle: style } : item;
+                }),
+                xAxisIndex: gridIndex,
                 yAxisIndex: yAxis.findIndex(({ name }) => name === unit),
+                barMaxWidth: type === 'bar' ? 16 : undefined,
                 itemStyle,
                 areaStyle,
                 stack: stacked ? type : undefined
