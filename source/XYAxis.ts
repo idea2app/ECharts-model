@@ -13,18 +13,7 @@ export interface KLineValue {
 export class KLineDataItem extends DataItem<
     KLineValue,
     EChartOption.SeriesCandlestick['itemStyle']
-> {
-    constructor(
-        name: string,
-        value: KLineValue,
-        style: EChartOption.SeriesCandlestick['itemStyle'] = {
-            color: 'red',
-            color0: 'green'
-        }
-    ) {
-        super(name, value, style);
-    }
-}
+> {}
 
 export type XYAxisSeriesType = 'line' | 'bar' | 'candlestick';
 
@@ -125,6 +114,8 @@ export class XYAxisModel implements XYAxisOption {
     }
 
     get yAxis(): EChartOption.YAxis[] {
+        const { yGrid = [1] } = this;
+        const ySum = yGrid.reduce((sum, item) => sum + item, 0);
         const formatter =
             this.renderYAxisPointerLabel ||
             (this.renderYAxisLabel &&
@@ -133,10 +124,12 @@ export class XYAxisModel implements XYAxisOption {
 
         return this.data
             .uniqueBy(({ unit }) => unit)
-            .map(({ unit, data, gridIndex }) => ({
-                type: 'value',
-                min:
-                    data[0] instanceof KLineDataItem
+            .map(({ type, unit, data, gridIndex }) => {
+                const show = yGrid[gridIndex] >= ySum / 2;
+                const min =
+                    type === 'bar'
+                        ? undefined
+                        : data[0] instanceof KLineDataItem
                         ? minScaleOf(
                               (data as KLineDataItem[]).map(
                                   ({ value: { low } }) => low
@@ -144,15 +137,26 @@ export class XYAxisModel implements XYAxisOption {
                           )
                         : minScaleOf(
                               (data as DataItem[]).map(({ value }) => value)
-                          ),
-                name: unit,
-                nameTextStyle: { align: 'right' },
-                gridIndex,
-                axisLabel: { formatter: this.renderYAxisLabel },
-                axisPointer: {
-                    label: { formatter }
-                }
-            }));
+                          );
+
+                return {
+                    type: 'value',
+                    min,
+                    gridIndex,
+                    name: unit,
+                    nameTextStyle: {
+                        color: show ? undefined : 'transparent',
+                        align: unit && unit.length > 3 ? 'left' : 'right'
+                    },
+                    axisLabel: {
+                        show,
+                        formatter: this.renderYAxisLabel
+                    },
+                    axisPointer: {
+                        label: { formatter }
+                    }
+                };
+            });
     }
 
     get grid(): EChartOption.Grid[] {
@@ -231,6 +235,7 @@ export class XYAxisModel implements XYAxisOption {
                 }),
                 xAxisIndex: gridIndex,
                 yAxisIndex: yAxis.findIndex(({ name }) => name === unit),
+                symbol: type === 'line' ? 'none' : undefined,
                 barMaxWidth: type === 'bar' ? 16 : undefined,
                 itemStyle,
                 areaStyle,

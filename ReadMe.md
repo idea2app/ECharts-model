@@ -16,13 +16,18 @@ npm i @types/echarts -D
 
 ## Examples
 
-### XYAxis
+### Line & Bar in one grid
 
 [![Edit ECharts model](https://codesandbox.io/static/img/play-codesandbox.svg)][6]
+
+### K-line & Bar in two grids
+
+[![Edit ECharts model](https://codesandbox.io/static/img/play-codesandbox.svg)][7]
 
 [1]: https://echarts.apache.org/
 [2]: https://www.typescriptlang.org/
 [3]: https://david-dm.org/idea2app/ECharts-model
 [4]: https://github.com/idea2app/ECharts-model/actions
 [5]: https://nodei.co/npm/echarts-model/
-[6]: https://codesandbox.io/s/echarts-model-xyaxis-zvf73?expanddevtools=1&fontsize=14&hidenavigation=1&theme=dark
+[6]: https://codesandbox.io/s/echarts-model-zvf73?autoresize=1&expanddevtools=1&fontsize=14&hidenavigation=1&module=%2Fsrc%2FLineBarChart.ts&theme=dark
+[7]: https://codesandbox.io/s/echarts-model-zvf73?autoresize=1&expanddevtools=1&fontsize=14&hidenavigation=1&module=%2Fsrc%2FKLineBarChart.ts&theme=dark
