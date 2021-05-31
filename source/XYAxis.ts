@@ -1,7 +1,12 @@
 import 'array-unique-proposal';
 import type { EChartOption } from 'echarts';
-
-import { DataItem, minScaleOf } from './Data';
+import {
+    DataItem,
+    DataSeriesOption,
+    DataSeries,
+    DataModelOption,
+    DataModel
+} from './Data';
 
 export interface KLineValue {
     open: number;
@@ -23,61 +28,76 @@ export interface XYAxisDataItem {
     itemStyle: Record<string, any>;
 }
 
-export type XYAxisSeries = Omit<EChartOption.SeriesLine, 'type' | 'data'> &
+export type XYAxisSeriesData = Omit<EChartOption.SeriesLine, 'type' | 'data'> &
     Omit<EChartOption.SeriesBar, 'type' | 'data'> &
     Omit<EChartOption.SeriesCandlestick, 'type' | 'data'> & {
         type: XYAxisSeriesType;
         data: (number | number[] | XYAxisDataItem)[];
     };
 
-export interface DataSeriesOption {
-    type: XYAxisSeries['type'];
-    name?: string;
+export interface XYAxisSeriesOption
+    extends DataSeriesOption<
+        XYAxisSeriesData['type'],
+        DataItem | KLineDataItem,
+        XYAxisSeriesData['itemStyle']
+    > {
     unit?: string;
-    data: (DataItem | KLineDataItem)[];
-    itemStyle?: XYAxisSeries['itemStyle'];
-    areaStyle?: XYAxisSeries['areaStyle'];
+    lineStyle?: XYAxisSeriesData['lineStyle'];
+    areaStyle?: XYAxisSeriesData['areaStyle'];
     gridIndex?: number;
 }
 
-export class DataSeries implements DataSeriesOption {
-    type: XYAxisSeries['type'];
-    name?: string;
+export class XYAxisSeries
+    extends DataSeries<
+        XYAxisSeriesData['type'],
+        DataItem | KLineDataItem,
+        XYAxisSeriesData['itemStyle']
+    >
+    implements XYAxisSeriesOption
+{
     unit?: string;
-    data: (DataItem | KLineDataItem)[];
-    itemStyle?: XYAxisSeries['itemStyle'];
-    areaStyle?: XYAxisSeries['areaStyle'];
+    lineStyle?: XYAxisSeriesData['lineStyle'];
+    areaStyle?: XYAxisSeriesData['areaStyle'];
     gridIndex?: number;
 
-    constructor(option: DataSeriesOption) {
-        this.type = option.type;
-        this.name = option.name;
+    constructor(option: XYAxisSeriesOption) {
+        super(option);
         this.unit = option.unit;
-        this.data = option.data;
-        this.itemStyle = option.itemStyle;
+        this.itemStyle =
+            option.data[0] instanceof KLineDataItem
+                ? { color: 'red', color0: 'green', ...option.itemStyle }
+                : option.itemStyle;
+        this.lineStyle = option.lineStyle;
         this.areaStyle = option.areaStyle;
         this.gridIndex = option.gridIndex || 0;
     }
 }
 
-export interface XYAxisOption {
-    data: DataSeries[];
+export interface XYAxisOption extends DataModelOption<XYAxisSeries> {
     stacked?: boolean;
     xGrid?: number[];
     yGrid?: number[];
 }
 
-export class XYAxisModel implements XYAxisOption {
-    data: DataSeries[];
+export class XYAxisModel
+    extends DataModel<XYAxisSeries>
+    implements XYAxisOption
+{
     stacked?: boolean;
     xGrid?: number[];
     yGrid?: number[];
 
     constructor({ data, stacked, xGrid, yGrid }: XYAxisOption) {
-        this.data = data;
+        super({ data });
         this.stacked = stacked;
         this.xGrid = xGrid;
         this.yGrid = yGrid;
+    }
+
+    get singleGrid() {
+        const { xGrid = [1], yGrid = [1] } = this;
+
+        return +xGrid === 1 && +yGrid === 1;
     }
 
     renderXAxisLabel?: (value: string, index: number) => string;
@@ -85,8 +105,6 @@ export class XYAxisModel implements XYAxisOption {
 
     renderXAxisPointerLabel?: (data: EChartOption.Tooltip.Format) => string;
     renderYAxisPointerLabel?: (data: EChartOption.Tooltip.Format) => string;
-
-    renderTooltip?: EChartOption.Tooltip.Formatter;
 
     get xAxis() {
         const formatter =
@@ -124,24 +142,12 @@ export class XYAxisModel implements XYAxisOption {
 
         return this.data
             .uniqueBy(({ unit }) => unit)
-            .map(({ type, unit, data, gridIndex }) => {
+            .map(({ type, unit, gridIndex }) => {
                 const show = yGrid[gridIndex] >= ySum / 2;
-                const min =
-                    type === 'bar'
-                        ? undefined
-                        : data[0] instanceof KLineDataItem
-                        ? minScaleOf(
-                              (data as KLineDataItem[]).map(
-                                  ({ value: { low } }) => low
-                              )
-                          )
-                        : minScaleOf(
-                              (data as DataItem[]).map(({ value }) => value)
-                          );
 
                 return {
                     type: 'value',
-                    min,
+                    min: type === 'bar' ? undefined : 'dataMin',
                     gridIndex,
                     name: unit,
                     nameTextStyle: {
@@ -163,7 +169,7 @@ export class XYAxisModel implements XYAxisOption {
         const { xGrid = [1], yGrid = [1] } = this,
             offset = 6;
 
-        if (+xGrid === 1 && +yGrid === 1) return [{}];
+        if (this.singleGrid) return [{}];
 
         const xSum = xGrid.reduce((sum, item) => sum + item, 0),
             ySum = yGrid.reduce((sum, item) => sum + item, 0);
@@ -202,10 +208,11 @@ export class XYAxisModel implements XYAxisOption {
             .map(({ name }) => name)
             .filter(Boolean) as string[];
 
-        return tags[0]
+        return this.singleGrid && tags[0]
             ? {
                   data: tags,
-                  bottom: '1rem'
+                  bottom: '1rem',
+                  formatter: this.renderLegend
               }
             : undefined;
     }
@@ -221,8 +228,17 @@ export class XYAxisModel implements XYAxisOption {
     valueOf() {
         const { data, xAxis, yAxis, grid, stacked, legend, tooltip } = this;
 
-        const series: XYAxisSeries[] = data.map(
-            ({ type, name, data, unit, itemStyle, areaStyle, gridIndex }) => ({
+        const series: XYAxisSeriesData[] = data.map(
+            ({
+                type,
+                name,
+                data,
+                unit,
+                itemStyle,
+                lineStyle,
+                areaStyle,
+                gridIndex
+            }) => ({
                 type,
                 name,
                 data: data.map(({ value, style }) => {
@@ -238,16 +254,22 @@ export class XYAxisModel implements XYAxisOption {
                 symbol: type === 'line' ? 'none' : undefined,
                 barMaxWidth: type === 'bar' ? 16 : undefined,
                 itemStyle,
+                lineStyle,
                 areaStyle,
                 stack: stacked ? type : undefined
             })
         );
         const axisPointer = { link: { xAxisIndex: 'all' } };
 
-        return { xAxis, yAxis, grid, series, legend, tooltip, axisPointer };
-    }
-
-    toJSON() {
-        return this.valueOf();
+        return {
+            ...super.valueOf(),
+            xAxis,
+            yAxis,
+            grid,
+            series,
+            legend,
+            tooltip,
+            axisPointer
+        };
     }
 }
