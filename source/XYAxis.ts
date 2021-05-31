@@ -63,6 +63,10 @@ export class XYAxisSeries
     constructor(option: XYAxisSeriesOption) {
         super(option);
         this.unit = option.unit;
+        this.itemStyle =
+            option.data[0] instanceof KLineDataItem
+                ? { color: 'red', color0: 'green', ...option.itemStyle }
+                : option.itemStyle;
         this.lineStyle = option.lineStyle;
         this.areaStyle = option.areaStyle;
         this.gridIndex = option.gridIndex || 0;
@@ -207,7 +211,8 @@ export class XYAxisModel
         return this.singleGrid && tags[0]
             ? {
                   data: tags,
-                  bottom: '1rem'
+                  bottom: '1rem',
+                  formatter: this.renderLegend
               }
             : undefined;
     }
@@ -256,6 +261,15 @@ export class XYAxisModel
         );
         const axisPointer = { link: { xAxisIndex: 'all' } };
 
-        return { xAxis, yAxis, grid, series, legend, tooltip, axisPointer };
+        return {
+            ...super.valueOf(),
+            xAxis,
+            yAxis,
+            grid,
+            series,
+            legend,
+            tooltip,
+            axisPointer
+        };
     }
 }

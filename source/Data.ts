@@ -47,19 +47,31 @@ export abstract class DataSeries<
 }
 
 export interface DataModelOption<T = DataSeries> {
+    name?: string;
     data: T[];
 }
 
 export abstract class DataModel<T = DataSeries> implements DataModelOption<T> {
+    name?: string;
     data: T[];
 
-    constructor({ data }: DataModelOption<T>) {
+    constructor({ name, data }: DataModelOption<T>) {
+        this.name = name;
         this.data = data.filter(Boolean);
     }
 
+    renderLegend?: EChartOption.Legend.Formatter;
     renderTooltip?: EChartOption.Tooltip.Formatter;
 
-    abstract valueOf(): Record<string, any>;
+    get title(): EChartOption['title'] | undefined {
+        return this.name && { text: this.name, left: 'center' };
+    }
+
+    valueOf() {
+        const { title } = this;
+
+        return { title };
+    }
 
     toJSON() {
         return this.valueOf();
